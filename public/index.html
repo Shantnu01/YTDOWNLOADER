@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>YT Downloader</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet" />
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg: #0b0d14;
+            --surface: rgba(255, 255, 255, 0.05);
+            --border: rgba(255, 255, 255, 0.09);
+            --red: #e8372a;
+            --red-glow: rgba(232, 55, 42, 0.30);
+            --green: #22c55e;
+            --muted: rgba(255, 255, 255, 0.45);
+            --radius: 14px;
+            --t: 0.22s ease;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg);
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-bottom: 60px;
+            background-image:
+                radial-gradient(ellipse 70% 50% at 15% 0%, rgba(232, 55, 42, 0.10) 0%, transparent 55%),
+                radial-gradient(ellipse 55% 45% at 85% 100%, rgba(100, 40, 180, 0.08) 0%, transparent 55%);
+        }
+
+        /* ── Orbs ─── */
+        .orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(90px);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .orb-1 {
+            width: 500px;
+            height: 500px;
+            top: -160px;
+            left: -160px;
+            background: rgba(232, 55, 42, 0.09);
+            animation: fl 14s ease-in-out infinite alternate;
+        }
+
+        .orb-2 {
+            width: 360px;
+            height: 360px;
+            bottom: -100px;
+            right: -80px;
+            background: rgba(120, 40, 200, 0.08);
+            animation: fl 11s ease-in-out infinite alternate-reverse;
+        }
+
+        @keyframes fl {
+            from {
+                transform: translate(0, 0)
+            }
+
+            to {
+                transform: translate(28px, 28px)
+            }
+        }
+
+        /* ── Layout ─── */
+        main {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 700px;
+            padding: 48px 20px 0;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* ── Header ─── */
+        header {
+            text-align: center;
+        }
+
+        .logo {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 60px;
+            height: 60px;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #e8372a, #ff6b35);
+            box-shadow: 0 0 28px var(--red-glow);
+            margin-bottom: 14px;
+            animation: glow 3s ease-in-out infinite;
+        }
+
+        @keyframes glow {
+
+            0%,
+            100% {
+                box-shadow: 0 0 28px var(--red-glow);
+            }
+
+            50% {
+                box-shadow: 0 0 48px var(--red-glow), 0 0 70px rgba(232, 55, 42, 0.12);
+            }
+        }
+
+        .logo svg {
+            width: 28px;
+            height: 28px;
+            fill: white;
+        }
+
+        h1 {
+            font-size: 1.9rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+
+        h1 span {
+            color: var(--red);
+        }
+
+        .sub {
+            margin-top: 5px;
+            color: var(--muted);
+            font-size: 0.88rem;
+        }
+
+        /* ── Card ─── */
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            backdrop-filter: blur(16px);
+        }
+
+        /* ── Input row ─── */
+        .input-row {
+            display: flex;
+            gap: 10px;
+        }
+
+        .url-input {
+            flex: 1;
+            padding: 13px 16px;
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: #fff;
+            font-size: 0.92rem;
+            font-family: 'Inter', sans-serif;
+            outline: none;
+            transition: border var(--t), box-shadow var(--t);
+        }
+
+        .url-input::placeholder {
+            color: var(--muted);
+        }
+
+        .url-input:focus {
+            border-color: rgba(232, 55, 42, 0.55);
+            box-shadow: 0 0 0 3px rgba(232, 55, 42, 0.10);
+        }
+
+        /* ── Buttons ─── */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 13px 20px;
+            border-radius: 10px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+            border: none;
+            transition: transform var(--t), box-shadow var(--t);
+        }
+
+        .btn:active {
+            transform: scale(0.96);
+        }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .btn-red {
+            background: linear-gradient(135deg, var(--red), #ff5733);
+            color: #fff;
+            box-shadow: 0 4px 18px rgba(232, 55, 42, 0.30);
+        }
+
+        .btn-red:not(:disabled):hover {
+            box-shadow: 0 6px 26px rgba(232, 55, 42, 0.50);
+            transform: translateY(-1px);
+        }
+
+        .btn-ghost {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid var(--border);
+            color: #fff;
+        }
+
+        .btn-ghost:not(:disabled):hover {
+            background: rgba(255, 255, 255, 0.10);
+        }
+
+        /* ── Spinner ─── */
+        .spin {
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.25);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: rot 0.65s linear infinite;
+            display: none;
+        }
+
+        @keyframes rot {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* ── Error ─── */
+        .err {
+            display: none;
+            color: #ff7070;
+            font-size: 0.83rem;
+            margin-top: 8px;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .err.show {
+            display: flex;
+        }
+
+        /* ── Info card ─── */
+        #infoCard {
+            display: none;
+        }
+
+        .thumb-row {
+            display: flex;
+            gap: 16px;
+            align-items: flex-start;
+        }
+
+        .thumb {
+            width: 150px;
+            min-width: 150px;
+            aspect-ratio: 16/9;
+            border-radius: 10px;
+            object-fit: cover;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .meta {
+            flex: 1;
+        }
+
+        .vid-title {
+            font-size: 0.97rem;
+            font-weight: 600;
+            line-height: 1.45;
+            margin-bottom: 8px;
+        }
+
+        .badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 9px;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 500;
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid var(--border);
+            color: var(--muted);
+        }
+
+        .badge svg {
+            width: 11px;
+            height: 11px;
+        }
+
+        /* ── Section label ─── */
+        .sec-label {
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+            margin-bottom: 10px;
+        }
+
+        /* ── Format grid ─── */
+        .format-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+            gap: 8px;
+        }
+
+        .fmt-card {
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 1.5px solid var(--border);
+            background: rgba(255, 255, 255, 0.04);
+            cursor: pointer;
+            transition: all var(--t);
+            text-align: left;
+        }
+
+        .fmt-card:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.18);
+        }
+
+        .fmt-card.active {
+            border-color: rgba(232, 55, 42, 0.65);
+            background: rgba(232, 55, 42, 0.10);
+        }
+
+        .fmt-res {
+            font-size: 1rem;
+            font-weight: 700;
+            display: block;
+        }
+
+        .fmt-size {
+            font-size: 0.74rem;
+            color: var(--muted);
+            margin-top: 2px;
+            display: block;
+        }
+
+        .fmt-ext {
+            font-size: 0.68rem;
+            color: var(--muted);
+            background: rgba(255, 255, 255, 0.08);
+            padding: 1px 5px;
+            border-radius: 4px;
+            margin-top: 4px;
+            display: inline-block;
+        }
+
+        /* Audio card */
+        .audio-card {
+            padding: 12px 14px;
+            border-radius: 10px;
+            border: 1.5px solid var(--border);
+            background: rgba(255, 255, 255, 0.04);
+            cursor: pointer;
+            transition: all var(--t);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .audio-card:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        .audio-card svg {
+            min-width: 18px;
+        }
+
+        /* ── Action buttons ─── */
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 4px;
+        }
+
+        /* ── Progress ─── */
+        #progressSection {
+            display: none;
+        }
+
+        .prog-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.82rem;
+            color: var(--muted);
+            margin-bottom: 8px;
+        }
+
+        .prog-track {
+            width: 100%;
+            height: 5px;
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .prog-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--red), #ff6b35);
+            border-radius: 999px;
+            transition: width 0.35s ease;
+        }
+
+        /* ── Toast ─── */
+        #toast {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%) translateY(16px);
+            background: rgba(22, 24, 32, 0.94);
+            border: 1px solid var(--border);
+            backdrop-filter: blur(12px);
+            padding: 11px 20px;
+            border-radius: 10px;
+            font-size: 0.86rem;
+            font-weight: 500;
+            color: #fff;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s, transform 0.3s;
+            z-index: 999;
+            white-space: nowrap;
+        }
+
+        #toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        footer {
+            position: relative;
+            z-index: 1;
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.75rem;
+            margin-top: 32px;
+        }
+
+        @media(max-width:500px) {
+            h1 {
+                font-size: 1.5rem;
+            }
+
+            .thumb-row {
+                flex-direction: column;
+            }
+
+            .thumb {
+                width: 100%;
+                min-width: unset;
+            }
+
+            .input-row {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+
+    <main>
+        <!-- Header -->
+        <header>
+            <div class="logo">
+                <svg viewBox="0 0 24 24">
+                    <path
+                        d="M10 16.5l6-4.5-6-4.5v9zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z" />
+                </svg>
+            </div>
+            <h1>YT <span>Downloader</span></h1>
+            <p class="sub">Paste any YouTube link · Pick your quality · Download instantly</p>
+        </header>
+
+        <!-- URL Input -->
+        <div class="card">
+            <div class="input-row">
+                <input id="urlInput" class="url-input" type="url" placeholder="https://www.youtube.com/watch?v=..."
+                    autocomplete="off" spellcheck="false" />
+                <button class="btn btn-red" id="fetchBtn" onclick="fetchInfo()">
+                    <div class="spin" id="fetchSpin"></div>
+                    <svg id="fetchIcon" width="15" height="15" viewBox="0 0 24 24" fill="white">
+                        <path
+                            d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+                    </svg>
+                    Fetch
+                </button>
+            </div>
+            <div class="err" id="errBox">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                    <path
+                        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+                </svg>
+                <span id="errText">Something went wrong.</span>
+            </div>
+        </div>
+
+        <!-- Video Info + Format Selector -->
+        <div class="card" id="infoCard">
+            <!-- Thumbnail + Meta -->
+            <div class="thumb-row">
+                <img id="thumb" class="thumb" src="" alt="thumbnail" />
+                <div class="meta">
+                    <div class="vid-title" id="vidTitle">—</div>
+                    <div class="badges">
+                        <span class="badge">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path
+                                    d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z" />
+                            </svg>
+                            <span id="metaAuthor">—</span>
+                        </span>
+                        <span class="badge">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path
+                                    d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67V7z" />
+                            </svg>
+                            <span id="metaDuration">—</span>
+                        </span>
+                        <span class="badge">
+                            <svg viewBox="0 0 24 24" fill="currentColor">
+                                <path
+                                    d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
+                            </svg>
+                            <span id="metaViews">—</span>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Video Quality Cards -->
+            <div style="margin-top:20px;">
+                <p class="sec-label">🎬 Video Quality</p>
+                <div class="format-grid" id="fmtGrid">
+                    <!-- populated by JS -->
+                </div>
+            </div>
+
+            <!-- Audio Option -->
+            <div style="margin-top:16px;" id="audioSection">
+                <p class="sec-label">🎵 Audio Only</p>
+                <div class="audio-card" id="audioCard" onclick="selectAudio()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="#e8372a">
+                        <path
+                            d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+                    </svg>
+                    <div>
+                        <span style="font-size:0.9rem;font-weight:600">Audio Only (MP3)</span>
+                        <span style="display:block;font-size:0.75rem;color:var(--muted)" id="audioMeta">—</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Download Button -->
+            <div class="actions" style="margin-top:20px;">
+                <button class="btn btn-red" id="dlBtn" onclick="startDownload()">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="white">
+                        <path d="M5 20h14v-2H5v2zm7-18L5.33 9h3.84v6h5.66V9h3.84L12 2z" />
+                    </svg>
+                    <span id="dlBtnLabel">Download</span>
+                </button>
+                <button class="btn btn-ghost" onclick="reset()">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <path
+                            d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z" />
+                    </svg>
+                    New Search
+                </button>
+            </div>
+        </div>
+
+        <!-- Progress -->
+        <div class="card" id="progressSection">
+            <div class="prog-header">
+                <span id="progLabel">Preparing…</span>
+                <span id="progPct">0%</span>
+            </div>
+            <div class="prog-track">
+                <div class="prog-fill" id="progFill"></div>
+            </div>
+            <div style="font-size:0.78rem;color:var(--muted);margin-top:7px;" id="progSub">Starting download…</div>
+        </div>
+    </main>
+
+    <footer>Built with Node.js &amp; yt-dlp &nbsp;·&nbsp; For educational use only</footer>
+    <div id="toast"></div>
+
+    <script>
+        // ── State ──────────────────────────────────────────────────────
+        let currentURL = '';
+        let selectedFormatId = null;   // yt-dlp format_id, null = auto-best
+        let selectedType = 'video';
+        let progressTimer = null;
+
+        // ── Utilities ──────────────────────────────────────────────────
+        const $ = id => document.getElementById(id);
+        const toast = (msg, ms = 3500) => {
+            const t = $('toast'); t.textContent = msg; t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), ms);
+        };
+        const showErr = msg => { $('errText').textContent = msg; $('errBox').classList.add('show'); };
+        const clearErr = () => $('errBox').classList.remove('show');
+
+        // ── Fetch video info ───────────────────────────────────────────
+        async function fetchInfo() {
+            clearErr();
+            const url = $('urlInput').value.trim();
+            if (!url) { showErr('Please paste a YouTube URL first.'); return; }
+
+            // Loading state
+            $('fetchBtn').disabled = true;
+            $('fetchSpin').style.display = 'block';
+            $('fetchIcon').style.display = 'none';
+
+            try {
+                const res = await fetch(`/info?url=${encodeURIComponent(url)}`);
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Could not fetch info');
+
+                currentURL = url;
+                renderInfo(data);
+
+            } catch (err) {
+                showErr(err.message);
+            } finally {
+                $('fetchBtn').disabled = false;
+                $('fetchSpin').style.display = 'none';
+                $('fetchIcon').style.display = 'block';
+            }
+        }
+
+        // ── Render info card ───────────────────────────────────────────
+        function renderInfo(data) {
+            $('thumb').src = data.thumbnail;
+            $('vidTitle').textContent = data.title;
+            $('metaAuthor').textContent = data.author;
+            $('metaDuration').textContent = data.duration;
+            $('metaViews').textContent = data.views + ' views';
+
+            // Build format cards
+            buildFormatCards(data.formats);
+
+            // Audio section
+            if (data.audioFormat) {
+                $('audioMeta').textContent = `${data.audioFormat.quality} · ${data.audioFormat.size}`;
+                $('audioSection').style.display = 'block';
+                $('audioCard').dataset.format_id = data.audioFormat.format_id;
+            } else {
+                $('audioSection').style.display = 'none';
+            }
+
+            // Auto-select highest quality card
+            selectedFormatId = null;
+            selectedType = 'video';
+            updateDlButton('video', 'highest');
+
+            // Show card
+            const card = $('infoCard');
+            card.style.display = 'block';
+            card.style.opacity = '0';
+            card.style.transform = 'translateY(10px)';
+            requestAnimationFrame(() => {
+                card.style.transition = 'opacity 0.35s ease, transform 0.35s ease';
+                card.style.opacity = '1';
+                card.style.transform = 'translateY(0)';
+            });
+
+            $('progressSection').style.display = 'none';
+        }
+
+        // ── Build quality cards ────────────────────────────────────────
+        function buildFormatCards(formats) {
+            const grid = $('fmtGrid');
+            grid.innerHTML = '';
+
+            if (!formats || formats.length === 0) {
+                grid.innerHTML = '<p style="color:var(--muted);font-size:0.85rem;">No combined formats available. Try audio only.</p>';
+                return;
+            }
+
+            formats.forEach((fmt, i) => {
+                const card = document.createElement('div');
+                card.className = 'fmt-card' + (i === 0 ? ' active' : '');
+                card.dataset.format_id = fmt.format_id;
+                card.innerHTML = `
+      <span class="fmt-res">${fmt.quality}</span>
+      <span class="fmt-size">${fmt.size}</span>
+      <span class="fmt-ext">${fmt.ext}</span>
+    `;
+                card.onclick = () => {
+                    document.querySelectorAll('.fmt-card').forEach(c => c.classList.remove('active'));
+                    $('audioCard').classList.remove('active');
+                    card.classList.add('active');
+                    selectedFormatId = fmt.format_id;
+                    selectedType = 'video';
+                    updateDlButton(fmt.quality, fmt.size);
+                };
+                grid.appendChild(card);
+
+                // Auto-select first format
+                if (i === 0) { selectedFormatId = fmt.format_id; }
+            });
+        }
+
+        // ── Select audio ───────────────────────────────────────────────
+        function selectAudio() {
+            document.querySelectorAll('.fmt-card').forEach(c => c.classList.remove('active'));
+            $('audioCard').classList.add('active');
+            selectedFormatId = null;
+            selectedType = 'audio';
+            updateDlButton('Audio Only', 'MP3');
+        }
+
+        // ── Update download button label ───────────────────────────────
+        function updateDlButton(quality, size) {
+            $('dlBtnLabel').textContent = `Download ${quality}`;
+        }
+
+        // ── Trigger download (Prepare -> Poll -> Download) ─────────────
+        async function startDownload() {
+            if (!currentURL) { toast('⚠️ Fetch a video first.'); return; }
+
+            const btn = $('dlBtn');
+            btn.disabled = true;
+
+            try {
+                // 1. Tell server to start downloading to disk
+                const res = await fetch('/prepare', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        url: currentURL,
+                        type: selectedType,
+                        ...(selectedFormatId && { format_id: selectedFormatId })
+                    })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed to start download');
+
+                // 2. Show progress UI and start polling
+                const section = $('progressSection');
+                const fill = $('progFill');
+                const pct = $('progPct');
+                const label = $('progLabel');
+                const sub = $('progSub');
+
+                fill.style.background = 'linear-gradient(90deg,var(--red),#ff6b35)';
+                section.style.display = 'block';
+                section.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+                label.textContent = selectedType === 'audio' ? '🎵 Extracting audio…' : '🎬 Preparing video…';
+                sub.textContent = 'Downloading to server… (this ensures high quality & resumability)';
+                fill.style.width = '0%';
+                pct.textContent = '0%';
+
+                const poll = setInterval(async () => {
+                    try {
+                        const statusRes = await fetch(`/status?jobId=${data.jobId}`);
+                        const statusData = await statusRes.json();
+
+                        if (statusData.status === 'error') {
+                            clearInterval(poll);
+                            sub.textContent = '❌ Error downloading file on server.';
+                            btn.disabled = false;
+                            fill.style.background = '#e8372a';
+                            return;
+                        }
+
+                        // yt-dlp stderr parses progress 0-100
+                        const p = statusData.progress || 0;
+                        fill.style.width = p + '%';
+                        pct.textContent = Math.floor(p) + '%';
+
+                        if (statusData.status === 'ready') {
+                            clearInterval(poll);
+                            fill.style.background = 'linear-gradient(90deg,#166534,#22c55e)';
+                            pct.textContent = '✅ Download Ready';
+                            sub.textContent = 'Sending file to your browser… (Supports Pause/Resume!)';
+                            toast('✅ Sending file to your browser...');
+
+                            // 3. Trigger actual browser download
+                            window.location.href = `/download/${data.jobId}`;
+                            btn.disabled = false;
+                        }
+                    } catch (e) {
+                        // ignore polling errors
+                    }
+                }, 1000);
+
+            } catch (err) {
+                toast('❌ Error: ' + err.message);
+                btn.disabled = false;
+            }
+        }
+
+        // ── Reset ──────────────────────────────────────────────────────
+        function reset() {
+            $('infoCard').style.display = 'none';
+            $('progressSection').style.display = 'none';
+            $('urlInput').value = '';
+            currentURL = '';
+            clearErr();
+            clearTimeout(progressTimer);
+        }
+
+        // ── Auto-fetch on paste ────────────────────────────────────────
+        $('urlInput').addEventListener('paste', () => {
+            clearErr();
+            setTimeout(() => {
+                const v = $('urlInput').value.trim();
+                if (v.includes('youtube.com/watch') || v.includes('youtu.be/')) fetchInfo();
+            }, 60);
+        });
+
+        // ── Enter key to fetch ─────────────────────────────────────────
+        $('urlInput').addEventListener('keydown', e => { if (e.key === 'Enter') fetchInfo(); });
+    </script>
+</body>
+
+</html>
