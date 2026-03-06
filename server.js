@@ -11,6 +11,7 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 
 const app = express();
+app.set('trust proxy', 1); // Trust Render's reverse proxy for accurate IP rate limiting
 const PORT = process.env.PORT || 3000;
 
 // Dynamic binary resolution for Windows (local) vs Linux (production)
