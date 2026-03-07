@@ -18,8 +18,13 @@ const ffmpegStatic = require('ffmpeg-static');
 
 // Dynamic binary resolution for Windows (local) vs Linux (production)
 const isWindows = process.platform === 'win32';
-const YTDLP = isWindows ? path.join(__dirname, 'yt-dlp.exe') : path.join(__dirname, 'yt-dlp');
-const FFMPEG = ffmpegStatic;
+let YTDLP = isWindows ? path.join(__dirname, 'yt-dlp.exe') : path.join(__dirname, 'yt-dlp');
+if (!isWindows && !fs.existsSync(YTDLP)) {
+    YTDLP = 'yt-dlp'; // Use system-wide yt-dlp if local binary isn't found
+}
+
+// Prefer the static ffmpeg binary (best for Render), fallback to system ffmpeg
+const FFMPEG = ffmpegStatic || 'ffmpeg';
 
 const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
 

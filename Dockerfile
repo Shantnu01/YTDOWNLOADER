@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y curl ffmpeg wget gnupg \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY package*.json ./
+COPY package*.json install-linux-deps.js ./
 RUN npm install
 
 # Copy application files (excluding those in .dockerignore)
