@@ -14,10 +14,12 @@ const app = express();
 app.set('trust proxy', 1); // Trust Render's reverse proxy for accurate IP rate limiting
 const PORT = process.env.PORT || 3000;
 
+const ffmpegStatic = require('ffmpeg-static');
+
 // Dynamic binary resolution for Windows (local) vs Linux (production)
 const isWindows = process.platform === 'win32';
-const YTDLP = isWindows ? path.join(__dirname, 'yt-dlp.exe') : 'yt-dlp';
-const FFMPEG = isWindows ? path.join(__dirname, 'ffmpeg.exe') : 'ffmpeg';
+const YTDLP = isWindows ? path.join(__dirname, 'yt-dlp.exe') : path.join(__dirname, 'yt-dlp');
+const FFMPEG = ffmpegStatic;
 
 const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
 
@@ -31,6 +33,8 @@ const BASE = [
     '--ffmpeg-location', FFMPEG,
     '--no-playlist',
     '--concurrent-fragments', '16',
+    '--js-runtimes', 'node', // Fixes "No supported JavaScript runtime could be found" on Render
+    '--extractor-args', 'youtube:client=android', // Bypasses the "Sign in to confirm you're not a bot" restriction
 ];
 
 // Security Middlewares
