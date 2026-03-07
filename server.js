@@ -39,7 +39,11 @@ const BASE = [
     '--no-playlist',
     '--concurrent-fragments', '16',
     '--js-runtimes', 'node', // Fixes "No supported JavaScript runtime could be found" on Render
-    '--extractor-args', 'youtube:client=android', // Bypasses the "Sign in to confirm you're not a bot" restriction
+    '--extractor-args', 'youtube:player-client=android,web_embedded,ios', // Best bypass for "Sign in to confirm you're not a bot"
+    '--quiet', '--no-warnings', // Ensure stdout is ONLY the JSON when using --dump-json
+    '--no-check-certificates', // Prevent SSL errors on cloud environments
+    '--prefer-free-formats',
+    '--youtube-skip-dash-manifest',
 ];
 
 // Security Middlewares
@@ -102,7 +106,15 @@ app.get('/info', async (req, res) => {
 
     try {
         const raw = await runYtDlp(['--dump-json', url]);
-        const data = JSON.parse(raw);
+        if (!raw) throw new Error('Empty response from metadata server');
+
+        let data;
+        try {
+            data = JSON.parse(raw);
+        } catch (e) {
+            console.error('[JSON Parse Error] Raw output:', raw);
+            throw new Error('Could not parse video metadata. YouTube might be blocking the request.');
+        }
 
         // 1. Find the exact M4A audio stream yt-dlp will select
         // We choose M4A because it naturally muxes into MP4 containers without FFmpeg re-encoding
