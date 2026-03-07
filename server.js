@@ -38,7 +38,8 @@ app.use(helmet({
     contentSecurityPolicy: false, // Prevent breaking local UI fetch requests
 }));
 app.use(cors());
-app.use(express.json());
+// Limit JSON body size to prevent JSON-bomb memory exhaustion
+app.use(express.json({ limit: '10kb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Rate Limiting to prevent spam/DDoS on expensive endpoints
@@ -54,10 +55,14 @@ app.use('/prepare', apiLimiter);
 // ─────────────────────────────────────────────────────────────
 //  Helpers
 // ─────────────────────────────────────────────────────────────
-function isValidYouTubeUrl(url) {
-    // Basic regex to ensure it's a YouTube domain and prevents CLI injection attempts
-    const regex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/;
-    return regex.test(url);
+function isValidYouTubeUrl(urlStr) {
+    try {
+        const url = new URL(urlStr);
+        // Extremely strict validation against CLI injection and domain spoofing (e.g., youtube.com.hacker.com)
+        return ['youtube.com', 'www.youtube.com', 'youtu.be', 'm.youtube.com'].includes(url.hostname);
+    } catch (e) {
+        return false;
+    }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -96,30 +101,42 @@ app.get('/info', async (req, res) => {
             .filter(f => f.vcodec === 'none' && f.acodec !== 'none' && f.ext === 'm4a')
             .sort((a, b) => (b.abr || 0) - (a.abr || 0))[0];
 
-        const audioBytes = audioFmt ? (audioFmt.filesize || audioFmt.filesize_approx || 0) : 0;
+        const audioWebm = (data.formats || [])
+            .filter(f => f.vcodec === 'none' && f.acodec !== 'none' && f.ext === 'webm')
+            .sort((a, b) => (b.abr || 0) - (a.abr || 0))[0];
+
+        const audioBytesMp4 = audioFmt ? (audioFmt.filesize || audioFmt.filesize_approx || 0) : 0;
+        const audioBytesWebm = audioWebm ? (audioWebm.filesize || audioWebm.filesize_approx || 0) : 0;
 
         const seenH = new Set();
         const videoFormats = [];
 
         (data.formats || [])
-            .filter(f => f.vcodec !== 'none' && f.height && f.ext === 'mp4')
-            .sort((a, b) => (b.height || 0) - (a.height || 0))
+            .filter(f => f.vcodec !== 'none' && (f.height || (f.resolution && f.resolution.includes('x'))) && ['mp4', 'webm'].includes(f.ext))
+            .sort((a, b) => {
+                const ha = a.height || parseInt((a.resolution || '0x0').split('x')[1]);
+                const hb = b.height || parseInt((b.resolution || '0x0').split('x')[1]);
+                return hb - ha || (b.fps || 0) - (a.fps || 0);
+            })
             .forEach(f => {
-                const label = `${f.height}p`;
+                const h = f.height || parseInt((f.resolution || '0x0').split('x')[1]);
+                const label = `${h}p`;
                 if (!seenH.has(label)) {
                     seenH.add(label);
                     // 2. Add the exact audio size to the video size for a highly accurate estimation
                     const vidBytes = f.filesize || f.filesize_approx || 0;
-                    const totalBytes = (vidBytes > 0 && audioBytes > 0) ? (vidBytes + audioBytes) : null;
+                    const hasAudio = f.acodec !== 'none';
+                    const fallbackAudio = f.ext === 'mp4' ? audioBytesMp4 : (audioBytesWebm || audioBytesMp4);
+                    const totalBytes = hasAudio ? vidBytes : (vidBytes > 0 && fallbackAudio > 0) ? (vidBytes + fallbackAudio) : null;
+                    const outExt = (f.ext === 'mp4' || hasAudio) ? 'mp4' : 'mkv';
 
                     videoFormats.push({
-                        height: f.height,
+                        height: h,
                         quality: label,
                         fps: f.fps ? `${f.fps}fps` : '',
-                        ext: 'auto', // Will usually be mp4 or mkv
+                        ext: outExt,
                         size: fmtBytes(totalBytes) || 'Est. varies',
-                        // Relaxed filter: prioritize mp4 if it exists for this height, otherwise accept webm
-                        format_id: `bestvideo[height=${f.height}]+bestaudio/best[height<=${f.height}]`,
+                        format_id: hasAudio ? f.format_id : `${f.format_id}+bestaudio/best`,
                     });
                 }
             });
@@ -148,17 +165,39 @@ app.get('/info', async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────
-//  POST /prepare
-//  Downloads video/audio to server disk before streaming to user.
-//  This fixes ffmpeg missing video issues (which happens when piping mp4 stdout)
-//  AND it enables exact file sizes allowing real pause/resume in browsers.
-// ─────────────────────────────────────────────────────────────
 const activeJobs = new Map();
+
+// Load limits to prevent server meltdown (CPU/RAM exhaustion)
+const MAX_CONCURRENT_DOWNLOADS = 10;
+const MAX_PER_IP = 2;
+
+let currentGlobalDownloads = 0;
+const ipDownloads = new Map();
+
+const clearIpLimits = (clientIp, jobId) => {
+    if (activeJobs.has(jobId) && activeJobs.get(jobId).limitsCleared) return;
+    currentGlobalDownloads = Math.max(0, currentGlobalDownloads - 1);
+    const nc = (ipDownloads.get(clientIp) || 1) - 1;
+    if (nc <= 0) ipDownloads.delete(clientIp);
+    else ipDownloads.set(clientIp, nc);
+    if (activeJobs.has(jobId)) activeJobs.get(jobId).limitsCleared = true;
+};
 
 app.post('/prepare', async (req, res) => {
     const { url, format_id, type = 'video' } = req.body;
+    const clientIp = req.ip || req.connection.remoteAddress;
+
     if (!url) return res.status(400).json({ error: 'Missing URL' });
     if (!isValidYouTubeUrl(url)) return res.status(400).json({ error: 'Invalid YouTube URL' });
+
+    // 1. Check Load Limits before spawning yt-dlp
+    if (currentGlobalDownloads >= MAX_CONCURRENT_DOWNLOADS) {
+        return res.status(503).json({ error: 'Server is at maximum capacity. Please try again in a few minutes.' });
+    }
+    const currentIpCount = ipDownloads.get(clientIp) || 0;
+    if (currentIpCount >= MAX_PER_IP) {
+        return res.status(429).json({ error: 'You have reached the maximum number of concurrent downloads (2).' });
+    }
 
     try {
         const titleRaw = await runYtDlp(['--print', 'title', url]);
@@ -196,6 +235,10 @@ app.post('/prepare', async (req, res) => {
         // Save job state
         activeJobs.set(jobId, { status: 'downloading', file: tempFile, title: cleanTitle, progress: 0 });
 
+        // Increment load counters
+        currentGlobalDownloads++;
+        ipDownloads.set(clientIp, currentIpCount + 1);
+
         const proc = spawn(YTDLP, [...spawnArgs, '--newline']);
 
         // yt-dlp sends progress to stdout, not stderr
@@ -218,11 +261,14 @@ app.post('/prepare', async (req, res) => {
         });
 
         proc.on('close', code => {
+            clearIpLimits(clientIp, jobId); // Free up slot immediately!
             const job = activeJobs.get(jobId);
+            if (!job) return;
 
             // Because we used %(ext)s in yt-dlp, we must find the exact file yt-dlp generated
             const files = fs.readdirSync(DOWNLOADS_DIR);
-            const downloadedFile = files.find(f => f.startsWith(jobId + '.'));
+            const downloadedFileFiles = files.filter(f => f.startsWith(jobId + '.') && !f.includes('.temp.') && !f.endsWith('.part') && !f.includes('.f'));
+            const downloadedFile = downloadedFileFiles[0];
 
             if (code === 0 && downloadedFile) {
                 const fullPath = path.join(DOWNLOADS_DIR, downloadedFile);
@@ -242,6 +288,10 @@ app.post('/prepare', async (req, res) => {
         res.json({ jobId });
 
     } catch (err) {
+        // Find if we already incremented but threw an error
+        if (typeof jobId !== 'undefined' && activeJobs.has(jobId)) {
+            clearIpLimits(clientIp, jobId);
+        }
         console.error('[/prepare]', err.message);
         const msg = err.message.toLowerCase();
         if (msg.includes('video unavailable') || msg.includes('incomplete') || msg.includes('not a valid')) {
@@ -275,10 +325,15 @@ app.get('/download/:jobId', (req, res) => {
         return res.status(404).send('File not found or not ready yet.');
     }
 
-    const filename = `${job.title}${path.extname(job.file)}`;
+    // Ensure title has no characters that crash node header parsing
+    const safeTitle = job.title.replace(/[^\w\s\-\.]/g, '_').trim() || 'video';
+    const filename = `${safeTitle}${path.extname(job.file)}`;
+
+    // Explicitly set the encoded Content-Disposition to prevent UUID fallback in Chromium browsers
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}; filename="${encodeURIComponent(filename)}"`);
 
     // This triggers browser download WITH proper sizes and range support
-    res.download(job.file, filename, (err) => {
+    res.sendFile(job.file, (err) => {
         // We optionally delete the file immediately after sending,
         // but to support true resuming over time, it's safer to let
         // the 1-hour timeout clean it up above. Let's keep it around.

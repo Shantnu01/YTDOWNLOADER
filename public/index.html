@@ -812,7 +812,12 @@
                             toast('✅ Sending file to your browser...');
 
                             // 3. Trigger actual browser download
-                            window.location.href = `/download/${data.jobId}`;
+                            const a = document.createElement('a');
+                            a.href = `/download/${data.jobId}`;
+                            a.download = '';
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
                             btn.disabled = false;
                         }
                     } catch (e) {
